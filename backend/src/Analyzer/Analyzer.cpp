@@ -355,7 +355,7 @@ namespace Analyzer
         }
         else if (command == "copy")
         {
-            err = ValidateParams("COPY", params, {"path", "path1", "dest"});
+            err = ValidateParams("COPY", params, {"path", "path1", "source", "dest", "destino", "destination"});
             if (!err.empty())
                 return err;
             std::string source;
@@ -363,15 +363,24 @@ namespace Analyzer
                 source = params["path"];
             else if (params.count("path1"))
                 source = params["path1"];
+            else if (params.count("source"))
+                source = params["source"];
             else
-                return "Error COPY: falta -path o -path1\n";
-            if (!params.count("dest"))
-                return "Error COPY: falta -dest\n";
-            return FileOperations::Copy(source, params["dest"]);
+                return "Error COPY: falta -path, -path1 o -source\n";
+            std::string dest;
+            if (params.count("dest"))
+                dest = params["dest"];
+            else if (params.count("destino"))
+                dest = params["destino"];
+            else if (params.count("destination"))
+                dest = params["destination"];
+            else
+                return "Error COPY: falta -dest, -destino o -destination\n";
+            return FileOperations::Copy(source, dest);
         }
         else if (command == "move")
         {
-            err = ValidateParams("MOVE", params, {"path", "path1", "dest"});
+            err = ValidateParams("MOVE", params, {"path", "path1", "source", "dest", "destino", "destination"});
             if (!err.empty())
                 return err;
             std::string source;
@@ -379,11 +388,60 @@ namespace Analyzer
                 source = params["path"];
             else if (params.count("path1"))
                 source = params["path1"];
+            else if (params.count("source"))
+                source = params["source"];
             else
-                return "Error MOVE: falta -path o -path1\n";
-            if (!params.count("dest"))
-                return "Error MOVE: falta -dest\n";
-            return FileOperations::Move(source, params["dest"]);
+                return "Error MOVE: falta -path, -path1 o -source\n";
+            std::string dest;
+            if (params.count("dest"))
+                dest = params["dest"];
+            else if (params.count("destino"))
+                dest = params["destino"];
+            else if (params.count("destination"))
+                dest = params["destination"];
+            else
+                return "Error MOVE: falta -dest, -destino o -destination\n";
+            return FileOperations::Move(source, dest);
+        }
+        else if (command == "find")
+        {
+            err = ValidateParams("FIND", params, {"path", "name"});
+            if (!err.empty())
+                return err;
+            if (!params.count("path") || !params.count("name"))
+                return "Error FIND: se requieren -path y -name\n";
+            return FileOperations::Find(params["path"], params["name"]);
+        }
+        else if (command == "chmod")
+        {
+            err = ValidateParams("CHMOD", params, {"path", "ugo"});
+            if (!err.empty())
+                return err;
+            if (!params.count("path") || !params.count("ugo"))
+                return "Error CHMOD: se requieren -path y -ugo\n";
+            return FileOperations::Chmod(params["path"], params["ugo"]);
+        }
+        else if (command == "chown")
+        {
+            err = ValidateParams("CHOWN", params, {"path", "usr", "grp"});
+            if (!err.empty())
+                return err;
+            if (!params.count("path"))
+                return "Error CHOWN: falta -path\n";
+            std::string usr = params.count("usr") ? params["usr"] : "";
+            std::string grp = params.count("grp") ? params["grp"] : "";
+            if (usr.empty() && grp.empty())
+                return "Error CHOWN: falta -usr o -grp\n";
+            return FileOperations::Chown(params["path"], usr, grp);
+        }
+        else if (command == "loss")
+        {
+            err = ValidateParams("LOSS", params, {"id"});
+            if (!err.empty())
+                return err;
+            if (!params.count("id"))
+                return "Error LOSS: falta -id\n";
+            return FileOperations::Loss(params["id"]);
         }
 
         // ── REPORTES ───────────────────────────────────────────────

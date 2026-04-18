@@ -1,13 +1,12 @@
-#pragma once
-#include <string>
-#include <vector>
-#include <fstream>
-#include "../Structs/Structs.h"
+#ifndef FILEOPERATIONS_H
+#define FILEOPERATIONS_H
 
-// FILEOPERATIONS — Operaciones sobre el sistema de archivos EXT2
-// Comandos:
-// MKDIR   -> crea directorios (con -p crea padres automáticamente)
-// MKFILE  -> crea archivos (con contenido opcional o aleatorio)
+#include "FileOperationsCore.h"
+#include "FileOperationsDir.h"
+#include "FileOperationsFile.h"
+#include "FileOperationsSearch.h"
+
+#endif
 // CAT     -> muestra el contenido de un archivo
 
 namespace FileOperations
@@ -15,15 +14,16 @@ namespace FileOperations
 
     // ── Comandos principales ──────────────────────────────────────
     std::string Mkdir(const std::string &path, bool createParents);
-    std::string Mkfile(const std::string &path, bool random,
-                       int size, const std::string &cont);
+    std::string Mkfile(const std::string &path, bool random, int size, const std::string &cont);
     std::string Cat(const std::string &filePath);
     std::string Remove(const std::string &path);
     std::string Rename(const std::string &path, const std::string &newName);
     std::string Copy(const std::string &source, const std::string &destination);
     std::string Move(const std::string &source, const std::string &destination);
-
-    // Helpers internos
+    std::string Find(const std::string &path, const std::string &name);
+    std::string Chmod(const std::string &path, const std::string &ugo);
+    std::string Chown(const std::string &path, const std::string &usr, const std::string &grp);
+    std::string Loss(const std::string &id);
 
     // Divide un path en partes
     // "/home/user/docs" -> ["home", "user", "docs"]

@@ -10,7 +10,10 @@ g++ -std=c++17 \
     src/DiskManagement/DiskManagement.cpp \
     src/FileSystem/FileSystem.cpp \
     src/UserSession/UserSession.cpp \
-    src/FileOperations/FileOperations.cpp \
+    src/FileOperations/FileOperationsCore.cpp \
+    src/FileOperations/FileOperationsDir.cpp \
+    src/FileOperations/FileOperationsFile.cpp \
+    src/FileOperations/FileOperationsSearch.cpp \
     src/Utilities/Utilities.cpp \
     src/Reports/Reports.h  \
     src/Reports/Reports.cpp  \
