@@ -4,10 +4,12 @@
 #include "../UserSession/UserSession.h"
 #include "../Utilities/Utilities.h"
 #include "../Structs/Structs.h"
+#include "../DiskManagement/DiskManagement.h"
 #include <sstream>
 #include <fstream>
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 
 namespace FileOperations
 {
@@ -189,6 +191,20 @@ namespace FileOperations
         AddEntryToDir(file, sb, UserSession::currentSession.partStart, parentInode, fileName, newInodeNum);
 
         file.close();
+
+        // Sincronizar con sistema de archivos físico
+        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
+        if (!mountPoint.empty())
+        {
+            std::filesystem::create_directories(std::filesystem::path(mountPoint + path).parent_path());
+            std::ofstream physFile(mountPoint + path);
+            if (physFile.is_open())
+            {
+                physFile << content;
+                physFile.close();
+            }
+        }
+
         out << "Archivo creado: " << path << "\n";
         out << "Tamaño: " << content.size() << " bytes\n";
         if (!content.empty() && !random)
@@ -326,6 +342,14 @@ namespace FileOperations
         }
 
         file.close();
+
+        // Sincronizar con sistema de archivos físico
+        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
+        if (!mountPoint.empty())
+        {
+            std::filesystem::remove_all(mountPoint + path);
+        }
+
         out << "Eliminado: " << path << "\n";
         out << "======================\n";
         return out.str();
@@ -515,6 +539,15 @@ namespace FileOperations
         }
 
         file.close();
+
+        // Sincronizar con sistema de archivos físico
+        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
+        if (!mountPoint.empty())
+        {
+            std::filesystem::create_directories(std::filesystem::path(mountPoint + destination).parent_path());
+            std::filesystem::copy_file(mountPoint + source, mountPoint + destination, std::filesystem::copy_options::overwrite_existing);
+        }
+
         out << "Copiado: " << source << " -> " << destination << "\n";
         out << "======================\n";
         return out.str();
@@ -658,6 +691,15 @@ namespace FileOperations
         }
 
         file.close();
+
+        // Sincronizar con sistema de archivos físico
+        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
+        if (!mountPoint.empty())
+        {
+            std::filesystem::create_directories(std::filesystem::path(mountPoint + destination).parent_path());
+            std::filesystem::rename(mountPoint + source, mountPoint + destination);
+        }
+
         out << "Movido: " << source << " -> " << destination << "\n";
         out << "======================\n";
         return out.str();

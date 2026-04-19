@@ -541,11 +541,16 @@ namespace DiskManagement
         Utilities::WriteObject(file, mbr, 0);
         file.close();
 
+        // Crear punto de montaje físico
+        std::string physicalRoot = "/tmp/extreamfs_mounts/" + id;
+        std::filesystem::create_directories(physicalRoot);
+
         //  Guardar en arreglo RAM
         mountedPartitions[mountedCount].path = path;
         mountedPartitions[mountedCount].name = name;
         mountedPartitions[mountedCount].id = id;
         mountedPartitions[mountedCount].correlative = discCorrelative;
+        mountedPartitions[mountedCount].mountPoint = physicalRoot;
         mountedCount++;
         globalCorrelative++;
 
@@ -594,6 +599,21 @@ namespace DiskManagement
             }
         }
         return -1;
+    }
+
+    // GetMountPoint
+    // Retorna el punto de montaje físico de una partición montada
+
+    std::string GetMountPoint(const std::string &id)
+    {
+        for (int i = 0; i < mountedCount; i++)
+        {
+            if (mountedPartitions[i].id == id)
+            {
+                return mountedPartitions[i].mountPoint;
+            }
+        }
+        return "";
     }
 
     std::string Unmount(const std::string &id)

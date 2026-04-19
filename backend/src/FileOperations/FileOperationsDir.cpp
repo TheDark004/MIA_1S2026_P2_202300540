@@ -4,9 +4,11 @@
 #include "../UserSession/UserSession.h"
 #include "../Utilities/Utilities.h"
 #include "../Structs/Structs.h"
+#include "../DiskManagement/DiskManagement.h"
 #include <sstream>
 #include <fstream>
 #include <cstring>
+#include <filesystem>
 
 namespace FileOperations
 {
@@ -154,6 +156,13 @@ namespace FileOperations
             FileSystem::WriteInode(file, sb, newInodeNum, newInode);
             AddEntryToDir(file, sb, UserSession::currentSession.partStart, parentInode, dirName, newInodeNum);
             out << "Directorio creado: " << path << "\n";
+        }
+
+        // Sincronizar con sistema de archivos físico
+        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
+        if (!mountPoint.empty())
+        {
+            std::filesystem::create_directories(mountPoint + path);
         }
 
         file.close();

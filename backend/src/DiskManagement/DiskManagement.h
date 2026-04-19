@@ -10,10 +10,11 @@ namespace DiskManagement
 
     struct MountedPartition
     {
-        std::string path; // Ruta del .mia
-        std::string name; // Nombre de la partición
-        std::string id;   // ID asignado: "341A"
-        int correlative;  // Número correlativo de montaje
+        std::string path;       // Ruta del .mia
+        std::string name;       // Nombre de la partición
+        std::string id;         // ID asignado: "341A"
+        int correlative;        // Número correlativo de montaje
+        std::string mountPoint; // Ruta física  donde se refleja la estructura
     };
 
     // Todas las funciones retornan string para enviarlo al frontend
@@ -39,5 +40,8 @@ namespace DiskManagement
 
     // Retorna el índice encontrado o -1 si no existe
     int FindMountedById(const std::string &id, std::string &outPath);
+
+    // Retorna el mountPoint físico o "" si no existe
+    std::string GetMountPoint(const std::string &id);
 
 }
