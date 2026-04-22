@@ -1,5 +1,6 @@
 #include "FileSystem.h"
 #include "../DiskManagement/DiskManagement.h"
+#include "../UserSession/UserSession.h"
 #include "../Utilities/Utilities.h"
 #include "../Structs/Structs.h"
 #include <cstring>
@@ -179,15 +180,15 @@ namespace FileSystem
         // 5.5 Para EXT3: Inicializar Journaling (todas las entradas vacías)
         if (fsType == 3)
         {
-            Journal emptyJournal{};
-            emptyJournal.j_count = 0;
-            std::memset(&emptyJournal.j_content, 0, sizeof(Information));
-
             for (int i = 0; i < FileSystem::JOURNALING_SIZE; i++)
             {
-                Utilities::WriteObject(file, emptyJournal, journal_start + i * sizeof(Journal));
+                Journal j_vacio{};
+                j_vacio.j_count = i;
+                std::memset(&j_vacio.j_content, 0, sizeof(Information)); // Limpiamos con ceros
+
+                Utilities::WriteObject(file, j_vacio, journal_start + (i * sizeof(Journal)));
             }
-            out << "Journaling inicializado (50 entradas vacías)\n";
+            out << "Journaling inicializado (" << FileSystem::JOURNALING_SIZE << " entradas vacías)\n";
         }
 
         //  6. Inicializar Bitmap de Inodos (todo en 0 = libres)
@@ -513,6 +514,212 @@ namespace FileSystem
     void WriteSuperBloque(std::fstream &file, int partStart, const SuperBloque &sb)
     {
         Utilities::WriteObject(file, sb, partStart);
+    }
+
+    // Función para registrar operaciones en el Journal
+    void RegisterInJournal(const std::string &op, const std::string &path, const std::string &content)
+    {
+        if (!UserSession::currentSession.active)
+            return;
+
+        auto file = Utilities::OpenFile(UserSession ::currentSession.diskPath);
+        if (!file.is_open())
+            return;
+
+        SuperBloque sb;
+        ReadSuperBloque(file, UserSession ::currentSession.partStart, sb);
+
+        // Si NO es EXT3, salimos para no afectar el EXT2
+        if (sb.s_filesystem_type != 3)
+        {
+            file.close();
+            return;
+        }
+
+        // El Journal empieza justo después del SuperBloque
+        int posJournal = UserSession ::currentSession.partStart + sizeof(SuperBloque);
+
+        // Buscamos la primera de las 50 posiciones que esté libre
+        for (int i = 0; i < 50; i++)
+        {
+            Journal j_actual;
+            Utilities::ReadObject(file, j_actual, posJournal + (i * sizeof(Journal)));
+
+            // Si la operación está vacía (empieza con \0), aquí guardamos el registro
+            if (j_actual.j_content.i_operation[0] == '\0')
+            {
+
+                // Llenamos la información asegurándonos de no desbordar los arrays
+                std::strncpy(j_actual.j_content.i_operation, op.c_str(), 9);
+                std::strncpy(j_actual.j_content.i_path, path.c_str(), 31);
+                std::strncpy(j_actual.j_content.i_content, content.c_str(), 63);
+
+                // Guardamos la fecha como Float (Unix Timestamp)
+                j_actual.j_content.i_date = static_cast<float>(std::time(nullptr));
+
+                // Escribimos este Journal de vuelta al disco
+                Utilities::WriteObject(file, j_actual, posJournal + (i * sizeof(Journal)));
+                break;
+            }
+        }
+
+        file.close();
+    }
+
+    int GetInodeFromPath(std::fstream &file, const SuperBloque &sb, std::string path)
+    {
+        if (path == "/" || path == "")
+            return 0; // Raíz siempre es inodo 0
+
+        std::vector<std::string> steps;
+        std::stringstream ss(path);
+        std::string segment;
+        while (std::getline(ss, segment, '/'))
+        {
+            if (!segment.empty())
+                steps.push_back(segment);
+        }
+
+        int currentInodeNum = 0; // Empezamos en la raíz
+        for (const auto &step : steps)
+        {
+            Inode inode;
+            ReadInode(file, sb, currentInodeNum, inode);
+
+            if (inode.i_type[0] != '0')
+                return -1; // No es carpeta, no podemos seguir
+
+            bool found = false;
+            // Buscamos en los bloques de la carpeta el nombre del siguiente paso
+            for (int i = 0; i < 15; i++)
+            {
+                if (inode.i_block[i] == -1)
+                    continue;
+
+                FolderBlock fb;
+                Utilities::ReadObject(file, fb, sb.s_block_start + inode.i_block[i] * sizeof(FolderBlock));
+
+                for (int j = 0; j < 4; j++)
+                {
+                    if (fb.b_content[j].b_inodo != -1 && std::string(fb.b_content[j].b_name) == step)
+                    {
+                        currentInodeNum = fb.b_content[j].b_inodo;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                    break;
+            }
+            if (!found)
+                return -1; // Carpeta o archivo no encontrado
+        }
+        return currentInodeNum;
+    }
+
+    //  OBTIENE LA LISTA DE ARCHIVOS DE UNA CARPETA -
+    std::vector<FileEntry> GetDirectoryContent(const std::string &path)
+    {
+        std::vector<FileEntry> entries;
+        if (!UserSession::currentSession.active)
+            return entries;
+
+        auto file = Utilities::OpenFile(UserSession::currentSession.diskPath);
+        if (!file.is_open())
+            return entries;
+
+        SuperBloque sb;
+        ReadSuperBloque(file, UserSession::currentSession.partStart, sb);
+
+        int inodeNum = GetInodeFromPath(file, sb, path);
+        if (inodeNum == -1)
+        {
+            file.close();
+            return entries;
+        }
+
+        Inode dirInode;
+        ReadInode(file, sb, inodeNum, dirInode);
+
+        if (dirInode.i_type[0] != '0')
+        {
+            file.close();
+            return entries;
+        }
+
+        // Recorremos los bloques de la carpeta para listar sus hijos
+        for (int i = 0; i < 15; i++)
+        {
+            if (dirInode.i_block[i] == -1)
+                continue;
+
+            FolderBlock fb;
+            Utilities::ReadObject(file, fb, sb.s_block_start + dirInode.i_block[i] * sizeof(FolderBlock));
+
+            for (int j = 0; j < 4; j++)
+            {
+                if (fb.b_content[j].b_inodo == -1)
+                    continue;
+                std::string name = fb.b_content[j].b_name;
+                if (name == "." || name == "..")
+                    continue; // Omitir navegación relativa
+
+                Inode childInode;
+                ReadInode(file, sb, fb.b_content[j].b_inodo, childInode);
+
+                FileEntry entry;
+                entry.name = name;
+                entry.type = childInode.i_type[0]; // '0' carpeta, '1' archivo
+                entry.size = childInode.i_size;
+                entry.date = childInode.i_mtime;
+                entry.perm = std::string(childInode.i_perm, 3);
+                entry.owner = "root"; // Se puede buscar el nombre real en users.txt
+                entries.push_back(entry);
+            }
+        }
+        file.close();
+        return entries;
+    }
+
+    // OBTIENE EL CONTENIDO DE UN ARCHIVO
+    std::string GetFileContent(const std::string &path)
+    {
+        if (!UserSession::currentSession.active)
+            return "Error: No hay sesión activa";
+
+        auto file = Utilities::OpenFile(UserSession::currentSession.diskPath);
+        if (!file.is_open())
+            return "Error: Disco no accesible";
+
+        SuperBloque sb;
+        ReadSuperBloque(file, UserSession::currentSession.partStart, sb);
+
+        int inodeNum = GetInodeFromPath(file, sb, path);
+        if (inodeNum == -1)
+            return "Archivo no encontrado";
+
+        Inode inode;
+        ReadInode(file, sb, inodeNum, inode);
+        if (inode.i_type[0] != '1')
+            return "Error: No es un archivo de texto";
+
+        std::string content = "";
+        int bytesLeft = inode.i_size;
+
+        for (int i = 0; i < 15; i++)
+        {
+            if (inode.i_block[i] == -1 || bytesLeft <= 0)
+                break;
+
+            FileBlock fb;
+            Utilities::ReadObject(file, fb, sb.s_block_start + inode.i_block[i] * sizeof(FolderBlock));
+
+            int toRead = std::min(bytesLeft, 64);
+            content.append(fb.b_content, toRead);
+            bytesLeft -= toRead;
+        }
+        file.close();
+        return content;
     }
 
 }
