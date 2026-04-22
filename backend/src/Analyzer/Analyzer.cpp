@@ -68,23 +68,24 @@ namespace Analyzer
         // Convertir a minúscula: "MKDISK" -> "mkdisk"
         std::transform(command.begin(), command.end(), command.begin(), ::tolower);
 
-        // Patrón: -(\w+)=("[^"]+"|\S+)
+        // Patrón: -(\w+)=("[^"]*"|\S*)
         //
         //   -         -> literal, el guión
         //   (\w+)     -> GRUPO 1: letras/dígitos/_ = nombre del param
         //   =         -> literal, el igual
         //   (         -> inicio GRUPO 2: el valor, que puede ser:
-        //     "[^"]+" -> entre comillas: permite espacios adentro
+        //     "[^"]*" -> entre comillas: permite espacios adentro y cadenas vacías
         //     |       -> O
-        //     \S+     -> sin comillas: cualquier cosa sin espacios
+        //     \S*     -> sin comillas: cualquier cosa sin espacios, puede ser vacío
         //   )
         //
         //   -size=3 -> key="size", value="3"
         //   -path=/home/A.mia -> key="path",  value="/home/A.mia"
         //   -path="/mi disco/A.mia" -> key="path", value="/mi disco/A.mia"
+        //   -name="" -> key="name", value=""
         //   -fit=bf -> key="fit", value="bf"
 
-        std::regex re(R"(-(\w+)=("[^"]+"|\S+))");
+        std::regex re(R"(-(\w+)=("[^"]*"|\S*))");
         auto it = std::sregex_iterator(line.begin(), line.end(), re);
         auto end = std::sregex_iterator();
 
@@ -470,6 +471,10 @@ namespace Analyzer
                 filePath = params["path_file_ls"];
 
             return Reports::Rep(params["id"], ruta, params["name"], filePath);
+        }
+        else if (command == "journaling")
+        {
+            return "Visor de Journaling abierto con éxito.\n";
         }
         else
         {

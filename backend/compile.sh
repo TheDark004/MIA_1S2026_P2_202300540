@@ -17,6 +17,7 @@ g++ -std=c++17 \
     src/Utilities/Utilities.cpp \
     src/Reports/Reports.h  \
     src/Reports/Reports.cpp  \
+    src/Information/Information.cpp \
     -lpthread \
     -o ExtreamFS
 
