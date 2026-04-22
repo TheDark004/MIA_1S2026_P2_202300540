@@ -938,4 +938,15 @@ namespace DiskManagement
         return out.str();
     }
 
+    std::vector<MountedPartition> GetMountedPartitionsList()
+    {
+        std::vector<MountedPartition> lista;
+        // Recorremos el arreglo estático hasta el límite de particiones montadas
+        for (int i = 0; i < mountedCount; i++)
+        {
+            lista.push_back(mountedPartitions[i]);
+        }
+        return lista;
+    }
+
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 namespace DiskManagement
 {
@@ -16,6 +17,8 @@ namespace DiskManagement
         int correlative;        // Número correlativo de montaje
         std::string mountPoint; // Ruta física  donde se refleja la estructura
     };
+
+    std::vector<MountedPartition> GetMountedPartitionsList();
 
     // Todas las funciones retornan string para enviarlo al frontend
     std::string Mkdisk(int size, const std::string &fit,
