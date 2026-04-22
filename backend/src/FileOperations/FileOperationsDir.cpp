@@ -83,9 +83,9 @@ namespace FileOperations
                 newInode.i_uid = UserSession::currentSession.uid;
                 newInode.i_gid = UserSession::GetGid(UserSession::currentSession.group, UserSession::ReadUsersFile(file, sb));
                 newInode.i_size = sizeof(FolderBlock);
-                memcpy(newInode.i_atime, now.c_str(), 19);
-                memcpy(newInode.i_ctime, now.c_str(), 19);
-                memcpy(newInode.i_mtime, now.c_str(), 19);
+                memcpy(newInode.i_atime, now.c_str(), sizeof(newInode.i_atime));
+                memcpy(newInode.i_ctime, now.c_str(), sizeof(newInode.i_ctime));
+                memcpy(newInode.i_mtime, now.c_str(), sizeof(newInode.i_mtime));
                 for (int j = 0; j < 15; j++)
                     newInode.i_block[j] = -1;
                 newInode.i_block[0] = newBlockNum;
@@ -163,6 +163,36 @@ namespace FileOperations
         if (!mountPoint.empty())
         {
             std::filesystem::create_directories(mountPoint + path);
+        }
+
+        if (sb.s_filesystem_type == 3)
+        {
+
+            Journal j_actual{};
+            memset(&j_actual, 0, sizeof(Journal));
+
+            strncpy(j_actual.j_content.i_operation, "mkdir", 9);
+            strncpy(j_actual.j_content.i_path, path.c_str(), 31);
+
+            j_actual.j_content.i_date = static_cast<float>(time(nullptr));
+
+            int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+
+            // Buscar el primer espacio vacío
+            for (int i = 0; i < 50; i++)
+            {
+                Journal temp{};
+                file.seekg(journalStart + (i * sizeof(Journal)));
+                file.read(reinterpret_cast<char *>(&temp), sizeof(Journal));
+
+                // Si está vacío, escribimos aquí
+                if (temp.j_content.i_operation[0] == '\0')
+                {
+                    file.seekp(journalStart + (i * sizeof(Journal)));
+                    file.write(reinterpret_cast<const char *>(&j_actual), sizeof(Journal));
+                    break;
+                }
+            }
         }
 
         file.close();

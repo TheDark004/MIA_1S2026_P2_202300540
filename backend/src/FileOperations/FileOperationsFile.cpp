@@ -81,9 +81,9 @@ namespace FileOperations
                     newInode.i_uid = UserSession::currentSession.uid;
                     newInode.i_gid = UserSession::GetGid(UserSession::currentSession.group, UserSession::ReadUsersFile(file, sb));
                     newInode.i_size = sizeof(FolderBlock);
-                    std::memcpy(newInode.i_atime, now.c_str(), 19);
-                    std::memcpy(newInode.i_ctime, now.c_str(), 19);
-                    std::memcpy(newInode.i_mtime, now.c_str(), 19);
+                    memcpy(newInode.i_atime, now.c_str(), sizeof(newInode.i_atime));
+                    memcpy(newInode.i_ctime, now.c_str(), sizeof(newInode.i_ctime));
+                    memcpy(newInode.i_mtime, now.c_str(), sizeof(newInode.i_mtime));
                     for (int j = 0; j < 15; j++)
                         newInode.i_block[j] = -1;
                     newInode.i_block[0] = newBlockNum;
@@ -189,6 +189,35 @@ namespace FileOperations
 
         FileSystem::WriteInode(file, sb, newInodeNum, newInode);
         AddEntryToDir(file, sb, UserSession::currentSession.partStart, parentInode, fileName, newInodeNum);
+
+        if (sb.s_filesystem_type == 3)
+        {
+            Journal j_actual{};
+            memset(&j_actual, 0, sizeof(Journal));
+
+            strncpy(j_actual.j_content.i_operation, "mkfile", 9);
+            strncpy(j_actual.j_content.i_path, path.c_str(), 31);
+
+            strncpy(j_actual.j_content.i_content, cont.c_str(), 63);
+
+            j_actual.j_content.i_date = static_cast<float>(time(nullptr));
+
+            int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+
+            for (int i = 0; i < 50; i++)
+            {
+                Journal temp{};
+                file.seekg(journalStart + (i * sizeof(Journal)));
+                file.read(reinterpret_cast<char *>(&temp), sizeof(Journal));
+
+                if (temp.j_content.i_operation[0] == '\0')
+                {
+                    file.seekp(journalStart + (i * sizeof(Journal)));
+                    file.write(reinterpret_cast<const char *>(&j_actual), sizeof(Journal));
+                    break;
+                }
+            }
+        }
 
         file.close();
 

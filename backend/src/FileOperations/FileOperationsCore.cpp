@@ -261,15 +261,22 @@ namespace FileOperations
         for (int i = 0; i < 12; i++)
         {
             if (dirInode.i_block[i] == -1)
-                break;
+                break; // Ojo: a veces los bloques no están en orden, podría ser mejor 'continue' si en el futuro borras bloques.
+
             FolderBlock fb{};
             int pos = sb.s_block_start + dirInode.i_block[i] * sizeof(FolderBlock);
             Utilities::ReadObject(file, fb, pos);
+
             for (int j = 0; j < 4; j++)
             {
                 if (fb.b_content[j].b_inodo == -1)
                     continue;
-                std::string entryName(fb.b_content[j].b_name);
+
+                // === LA SOLUCIÓN MÁGICA AQUÍ ===
+                // Calculamos el tamaño real (máximo 12) para evitar leer basura de memoria
+                size_t nameLen = strnlen(fb.b_content[j].b_name, 12);
+                std::string entryName(fb.b_content[j].b_name, nameLen);
+
                 if (entryName == name)
                 {
                     return fb.b_content[j].b_inodo;
@@ -295,12 +302,12 @@ namespace FileOperations
                 if (fb.b_content[j].b_inodo == -1)
                 {
                     std::memset(fb.b_content[j].b_name, 0, 12);
-                    std::memcpy(fb.b_content[j].b_name, name.c_str(), std::min(name.size(), (size_t)11));
+                    std::memcpy(fb.b_content[j].b_name, name.c_str(), std::min(name.size(), (size_t)12));
                     fb.b_content[j].b_inodo = newInodeNum;
                     Utilities::WriteObject(file, fb, pos);
                     dirInode.i_size += sizeof(FolderContent);
                     std::string now = Utilities::GetCurrentDateTime();
-                    std::memcpy(dirInode.i_mtime, now.c_str(), 19);
+                    std::memcpy(dirInode.i_mtime, now.c_str(), sizeof(dirInode.i_mtime));
                     FileSystem::WriteInode(file, sb, dirInodeNum, dirInode);
                     FileSystem::WriteSuperBloque(file, partStart, sb);
                     return true;
@@ -328,14 +335,14 @@ namespace FileOperations
             newFb.b_content[j].b_inodo = -1;
         }
         std::memset(newFb.b_content[0].b_name, 0, 12);
-        std::memcpy(newFb.b_content[0].b_name, name.c_str(), std::min(name.size(), (size_t)11));
+        std::memcpy(newFb.b_content[0].b_name, name.c_str(), std::min(name.size(), (size_t)12));
         newFb.b_content[0].b_inodo = newInodeNum;
         int pos = sb.s_block_start + newBlockNum * sizeof(FolderBlock);
         Utilities::WriteObject(file, newFb, pos);
         dirInode.i_block[nextBlockSlot] = newBlockNum;
         dirInode.i_size += sizeof(FolderContent);
         std::string now = Utilities::GetCurrentDateTime();
-        std::memcpy(dirInode.i_mtime, now.c_str(), 19);
+        std::memcpy(dirInode.i_mtime, now.c_str(), sizeof(dirInode.i_mtime));
         FileSystem::WriteInode(file, sb, dirInodeNum, dirInode);
         FileSystem::WriteSuperBloque(file, partStart, sb);
         return true;
