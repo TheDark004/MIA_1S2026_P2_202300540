@@ -59,21 +59,38 @@ export default function App() {
       const output = data.output || "";
 
       const newReports = [];
+
+      if (Array.isArray(data.reports) && data.reports.length > 0) {
+        data.reports.forEach(({ filename, ruta }) => {
+          if (filename && ruta) {
+            newReports.push({
+              filename,
+              ruta,
+              url: `/reports/${encodeURIComponent(ruta)}`,
+            });
+          }
+        });
+      }
+
       const lines = output.split("\n");
       lines.forEach((line) => {
         if (line.startsWith("REPORTE:")) {
           const ruta = line.replace("REPORTE:", "").trim();
           const filename = ruta.split("/").pop();
-          newReports.push({
-            filename,
-            ruta,
-            url: `/reports/${encodeURIComponent(ruta)}`,
-          });
+          // Evitar duplicados
+          if (!newReports.find((r) => r.ruta === ruta)) {
+            newReports.push({
+              filename,
+              ruta,
+              url: `/reports/${encodeURIComponent(ruta)}`,
+            });
+          }
         }
       });
 
       if (newReports.length > 0) {
         setReports((prev) => [...prev, ...newReports]);
+        setShowGallery(true);
       }
 
       const cleanOutput = lines
@@ -200,6 +217,20 @@ export default function App() {
           >
             Discos
           </button>
+
+          {selectedPartition && (
+            <button
+              style={styles.headerBtn}
+              onClick={() => {
+                setJournalTargetId(selectedPartition.id);
+                setShowJournal(true);
+              }}
+            >
+              Journaling ({selectedPartition.id})
+            </button>
+          )}
+          {/* ------------------------------------------------------------- */}
+
           {session.active ? (
             <>
               <div style={styles.sessionBadge}>
@@ -215,15 +246,6 @@ export default function App() {
               </div>
               <button
                 style={styles.headerBtn}
-                onClick={() => {
-                  setJournalTargetId(session.partId);
-                  setShowJournal(true);
-                }}
-              >
-                Journaling
-              </button>
-              <button
-                style={styles.headerBtn}
                 onClick={() => setShowExplorer(true)}
               >
                 Explorar
@@ -237,6 +259,7 @@ export default function App() {
               Iniciar sesión
             </button>
           )}
+
           {reports.length > 0 && (
             <button
               style={styles.galleryBtn}

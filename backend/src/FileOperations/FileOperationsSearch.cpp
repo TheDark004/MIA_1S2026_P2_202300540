@@ -4,6 +4,7 @@
 #include "../UserSession/UserSession.h"
 #include "../Utilities/Utilities.h"
 #include "../Structs/Structs.h"
+#include "../DiskManagement/DiskManagement.h"
 #include <sstream>
 #include <fstream>
 #include <functional>
@@ -325,27 +326,60 @@ namespace FileOperations
         std::ostringstream out;
         out << "======= LOSS =======\n";
 
-        if (!UserSession::currentSession.active)
+        // 1. Obtener la ruta del disco usando tu función real
+        std::string diskPath;
+        if (DiskManagement::FindMountedById(id, diskPath) == -1)
         {
-            out << "Error: No hay sesión activa. Usa LOGIN primero\n";
+            out << "Error: La partición con ID " << id << " no está montada.\n";
             return out.str();
         }
 
-        if (UserSession::currentSession.uid != 1)
+        // 2. Obtener el nombre de la partición montada
+        std::string partName = "";
+        for (const auto &p : DiskManagement::GetMountedPartitionsList())
         {
-            out << "Error: Solo root puede ejecutar LOSS\n";
-            return out.str();
+            if (p.id == id)
+            {
+                partName = p.name;
+                break;
+            }
         }
 
-        auto file = Utilities::OpenFile(UserSession::currentSession.diskPath);
+        auto file = Utilities::OpenFile(diskPath);
         if (!file.is_open())
         {
             out << "Error: No se pudo abrir el disco\n";
             return out.str();
         }
 
+        // 3. Leer el MBR para encontrar el partStart
+        MBR mbr{};
+        file.seekg(0);
+        file.read(reinterpret_cast<char *>(&mbr), sizeof(MBR));
+
+        int partStart = -1;
+        for (int i = 0; i < 4; i++)
+        {
+
+            if (mbr.Partitions[i].Status[0] == '1' && std::string(mbr.Partitions[i].Name) == partName)
+            {
+                partStart = mbr.Partitions[i].Start;
+                break;
+            }
+        }
+
+        // (Opcional) Si manejas particiones lógicas, aquí iría la búsqueda en los EBR...
+
+        if (partStart == -1)
+        {
+            out << "Error: No se encontró el inicio de la partición '" << partName << "'.\n";
+            file.close();
+            return out.str();
+        }
+
+        // 4. Leer el SuperBloque
         SuperBloque sb{};
-        FileSystem::ReadSuperBloque(file, UserSession::currentSession.partStart, sb);
+        FileSystem::ReadSuperBloque(file, partStart, sb);
 
         if (sb.s_filesystem_type != 3)
         {
@@ -355,19 +389,110 @@ namespace FileOperations
         }
 
         out << "Simulando pérdida de datos...\n";
+
+        // 5. Destrucción
+        int bmInodeSize = sb.s_inodes_count;
+        int bmBlockSize = sb.s_blocks_count;
+        int inodeTableSize = sb.s_inodes_count * sizeof(Inode);
+        int blockTableSize = sb.s_blocks_count * 64;
+
+        std::vector<char> zeroBmInode(bmInodeSize, '\0');
+        file.seekp(sb.s_bm_inode_start);
+        file.write(zeroBmInode.data(), bmInodeSize);
+
+        std::vector<char> zeroBmBlock(bmBlockSize, '\0');
+        file.seekp(sb.s_bm_block_start);
+        file.write(zeroBmBlock.data(), bmBlockSize);
+
+        std::vector<char> zeroInodeTable(inodeTableSize, '\0');
+        file.seekp(sb.s_inode_start);
+        file.write(zeroInodeTable.data(), inodeTableSize);
+
+        std::vector<char> zeroBlockTable(blockTableSize, '\0');
+        file.seekp(sb.s_block_start);
+        file.write(zeroBlockTable.data(), blockTableSize);
+
+        file.close();
+
+        out << "¡Destrucción completada!\n";
+        out << "Bitmaps y Tablas han sido llenados con \\0\n";
+        out << "======================\n";
+        return out.str();
+    }
+
+    std::string Recovery(const std::string &id)
+    {
+        std::ostringstream out;
+        out << "======= RECOVERY =======\n";
+
+        std::string diskPath;
+        if (DiskManagement::FindMountedById(id, diskPath) == -1)
+        {
+            out << "Error: La partición con ID " << id << " no está montada.\n";
+            return out.str();
+        }
+
+        std::string partName = "";
+        for (const auto &p : DiskManagement::GetMountedPartitionsList())
+        {
+            if (p.id == id)
+            {
+                partName = p.name;
+                break;
+            }
+        }
+
+        auto file = Utilities::OpenFile(diskPath);
+        if (!file.is_open())
+        {
+            out << "Error: No se pudo abrir el disco\n";
+            return out.str();
+        }
+
+        MBR mbr{};
+        file.seekg(0);
+        file.read(reinterpret_cast<char *>(&mbr), sizeof(MBR));
+
+        int partStart = -1;
+        for (int i = 0; i < 4; i++)
+        {
+            if (mbr.Partitions[i].Status[0] == '1' && std::string(mbr.Partitions[i].Name) == partName)
+            {
+                partStart = mbr.Partitions[i].Start;
+                break;
+            }
+        }
+
+        if (partStart == -1)
+        {
+            out << "Error: No se encontró el inicio de la partición.\n";
+            file.close();
+            return out.str();
+        }
+
+        SuperBloque sb{};
+        FileSystem::ReadSuperBloque(file, partStart, sb);
+
+        if (sb.s_filesystem_type != 3)
+        {
+            out << "Error: RECOVERY solo funciona en EXT3\n";
+            file.close();
+            return out.str();
+        }
+
         out << "Recuperando desde journaling...\n";
 
-        int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+        int journalStart = partStart + sizeof(SuperBloque);
         int recovered = 0;
 
-        for (int i = 0; i < FileSystem::JOURNALING_SIZE; i++)
+        for (int i = 0; i < 50; i++)
         {
             Journal journalEntry{};
             Utilities::ReadObject(file, journalEntry, journalStart + i * sizeof(Journal));
 
-            if (journalEntry.j_count > 0)
+            if (journalEntry.j_content.i_operation[0] != '\0')
             {
-                out << "Recuperando operación: " << journalEntry.j_content.i_operation << "\n";
+                out << "Recuperando operación: " << journalEntry.j_content.i_operation << " en " << journalEntry.j_content.i_path << "\n";
                 recovered++;
             }
         }
@@ -383,7 +508,7 @@ namespace FileOperations
 
         file.close();
         out << "Recuperación completada\n";
-        out << "======================\n";
+        out << "========================\n";
         return out.str();
     }
 

@@ -629,8 +629,18 @@ namespace FileOperations
         std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
         if (!mountPoint.empty())
         {
-            std::filesystem::create_directories(std::filesystem::path(mountPoint + destination).parent_path());
-            std::filesystem::copy_file(mountPoint + source, mountPoint + destination, std::filesystem::copy_options::overwrite_existing);
+            try
+            {
+                std::filesystem::create_directories(std::filesystem::path(mountPoint + destination).parent_path());
+
+                std::filesystem::copy(mountPoint + source, mountPoint + destination,
+                                      std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing);
+            }
+            catch (const std::exception &e)
+            {
+
+                out << "Aviso: No se pudo sincronizar fisicamente (" << e.what() << ")\n";
+            }
         }
 
         out << "Copiado: " << source << " -> " << destination << "\n";
@@ -775,15 +785,34 @@ namespace FileOperations
             UpdateDirectoryParent(file, sb, srcInode, destParent);
         }
 
-        file.close();
-
-        // Sincronizar con sistema de archivos físico
-        std::string mountPoint = DiskManagement::GetMountPoint(UserSession::currentSession.partId);
-        if (!mountPoint.empty())
+        // --- GUARDAR EN EL JOURNAL ---
+        if (sb.s_filesystem_type == 3)
         {
-            std::filesystem::create_directories(std::filesystem::path(mountPoint + destination).parent_path());
-            std::filesystem::rename(mountPoint + source, mountPoint + destination);
+            Journal j_actual{};
+            memset(&j_actual, 0, sizeof(Journal));
+
+            strncpy(j_actual.j_content.i_operation, "move", 9);
+            strncpy(j_actual.j_content.i_path, source.c_str(), 31);
+            j_actual.j_content.i_date = static_cast<float>(time(nullptr));
+
+            int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+
+            for (int i = 0; i < 50; i++)
+            {
+                Journal temp{};
+                file.seekg(journalStart + (i * sizeof(Journal)));
+                file.read(reinterpret_cast<char *>(&temp), sizeof(Journal));
+
+                if (temp.j_content.i_operation[0] == '\0')
+                {
+                    file.seekp(journalStart + (i * sizeof(Journal)));
+                    file.write(reinterpret_cast<const char *>(&j_actual), sizeof(Journal));
+                    break;
+                }
+            }
         }
+
+        file.close();
 
         out << "Movido: " << source << " -> " << destination << "\n";
         out << "======================\n";

@@ -24,6 +24,7 @@ namespace FileOperations
     std::string Chmod(const std::string &path, const std::string &ugo);
     std::string Chown(const std::string &path, const std::string &usr, const std::string &grp);
     std::string Loss(const std::string &id);
+    std::string Recovery(const std::string &id);
 
     // Divide un path en partes
     // "/home/user/docs" -> ["home", "user", "docs"]

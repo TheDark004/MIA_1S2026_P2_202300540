@@ -15,8 +15,10 @@ namespace FileOperations
     // CHOWN — Cambia propietario de un archivo o directorio
     std::string Chown(const std::string &path, const std::string &usuario, bool isRecursive);
 
-    // LOSS — Simula recuperación de datos en EXT3
+    // LOSS — Simula pérdida de datos en EXT3
     std::string Loss(const std::string &id);
+    // RECOVERY — Simula recuperación de datos en EXT3
+    std::string Recovery(const std::string &id);
 
 }
 

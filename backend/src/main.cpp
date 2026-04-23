@@ -195,21 +195,74 @@ int main()
         return res; });
 
     // VISUALIZADOR DE JOURNALING
-    CROW_ROUTE(app, "/fs/journal").methods(crow::HTTPMethod::GET, crow::HTTPMethod::OPTIONS)([](const crow::request &req)
-                                                                                             {
-        crow::response res;
-        AddCors(res);
+    CROW_ROUTE(app, "/fs/journal")
+    ([&](const crow::request &req)
+     {
+        char* id_param = req.url_params.get("id");
+        if (!id_param) return crow::response(400, "Falta ID");
+        
+        std::string id = id_param;
+        std::string diskPath;
+        
+        // 1. Buscar disco usando tu DiskManagement
+        if (DiskManagement::FindMountedById(id, diskPath) == -1) {
+            auto res = crow::response(404, "Particion no montada");
+            AddCors(res); return res;
+        }
+
+        // 2. Obtener nombre de la partición
+        std::string partName = "";
+        for (const auto &p : DiskManagement::GetMountedPartitionsList()) {
+            if (p.id == id) { partName = p.name; break; }
+        }
+
+        auto file = Utilities::OpenFile(diskPath);
+        MBR mbr{};
+        file.seekg(0);
+        file.read(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+
+        int partStart = -1;
+        for (int i = 0; i < 4; i++) {
+            // Usando Status[0] para evitar el error de char* vs char
+            if (mbr.Partitions[i].Status[0] == '1' && std::string(mbr.Partitions[i].Name) == partName) {
+                partStart = mbr.Partitions[i].Start; // Revisa si es .Start o .part_start
+                break;
+            }
+        }
+
+        if (partStart == -1) { file.close(); return crow::response(404, "No en MBR"); }
+
+        SuperBloque sb{};
+        FileSystem::ReadSuperBloque(file, partStart, sb);
+        
+        // 3. Construir el JSON que espera JournalViewer.jsx
+        json journalArray = json::array();
+        int journalStart = partStart + sizeof(SuperBloque);
+
+        for (int i = 0; i < 50; i++) {
+            Journal jEntry{};
+            Utilities::ReadObject(file, jEntry, journalStart + i * sizeof(Journal));
+
+            if (jEntry.j_content.i_operation[0] != '\0') {
+                json item;
+                item["operation"] = std::string(jEntry.j_content.i_operation);
+                item["path"] = std::string(jEntry.j_content.i_path);
+                item["content"] = "-"; // O el contenido si lo guardas
+                
+                // Formatear fecha
+                time_t rawtime = static_cast<time_t>(jEntry.j_content.i_date);
+                char buf[20];
+                strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", localtime(&rawtime));
+                item["date"] = std::string(buf);
+                
+                journalArray.push_back(item);
+            }
+        }
+        file.close();
+
+        auto res = crow::response(200, journalArray.dump());
         res.add_header("Content-Type", "application/json");
-        if (req.method == crow::HTTPMethod::OPTIONS) { res.code = 204; return res; }
-
-        // Obtenemos el ID de la partición desde la URL (ej: /fs/journal?id=401A)
-        std::string id = req.url_params.get("id") ? req.url_params.get("id") : "";
-
-        // Extraemos las operaciones de la bitácora EXT3
-        json journalList = SystemInfo::GetJournaling(id);
-
-        res.code = 200;
-        res.body = journalList.dump();
+        AddCors(res);
         return res; });
 
     // ── GET /fs/browse ───────────────────────────────────────
