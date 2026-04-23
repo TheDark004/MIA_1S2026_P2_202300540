@@ -149,18 +149,19 @@ namespace Analyzer
         else if (command == "fdisk")
         {
             // FDISK puede tener 3 variantes:
-            // 1. Crear partición: -size, -path, -name, -type, -fit, -unit
-            // 2. Agregar espacio: -add, -unit, -path, -name
-            // 3. Eliminar partición: -delete, -path, -name
+            // 1. Agregar espacio (-add)
+            // 2. Eliminar partición (-delete)
+            // 3. Crear partición (-size)
 
             if (params.count("add"))
             {
-                // FDISK -add: agregar espacio a partición existente
-                err = ValidateParams("FDISK", params, {"add", "unit", "path", "name"});
+
+                err = ValidateParams("FDISK", params, {"add", "unit", "path", "name", "size", "type", "fit", "delete"});
                 if (!err.empty())
                     return err;
                 if (!params.count("path") || !params.count("name"))
                     return "Error FDISK -add: Se requieren -path y -name\n";
+
                 return DiskManagement::FdiskAdd(
                     std::stoi(params["add"]),
                     params.count("unit") ? params["unit"] : "k",
@@ -168,12 +169,13 @@ namespace Analyzer
             }
             else if (params.count("delete"))
             {
-                // FDISK -delete: eliminar partición
-                err = ValidateParams("FDISK", params, {"delete", "path", "name"});
+                // Igual aquí, permitimos que vengan otros pero los ignoramos
+                err = ValidateParams("FDISK", params, {"delete", "path", "name", "size", "unit", "type", "fit", "add"});
                 if (!err.empty())
                     return err;
                 if (!params.count("path") || !params.count("name"))
                     return "Error FDISK -delete: Se requieren -path y -name\n";
+
                 return DiskManagement::FdiskDelete(
                     params["delete"],
                     params["path"], params["name"]);
@@ -186,6 +188,7 @@ namespace Analyzer
                     return err;
                 if (!params.count("size") || !params.count("path") || !params.count("name"))
                     return "Error FDISK: Se requieren -size, -path y -name\n";
+
                 return DiskManagement::Fdisk(
                     std::stoi(params["size"]),
                     params["path"], params["name"],
@@ -424,16 +427,18 @@ namespace Analyzer
         }
         else if (command == "chown")
         {
-            err = ValidateParams("CHOWN", params, {"path", "usr", "grp"});
+            // El enunciado pide: -path (obligatorio), -usuario (obligatorio), -r (opcional)
+            err = ValidateParams("CHOWN", params, {"path", "usuario", "r"});
             if (!err.empty())
                 return err;
-            if (!params.count("path"))
-                return "Error CHOWN: falta -path\n";
-            std::string usr = params.count("usr") ? params["usr"] : "";
-            std::string grp = params.count("grp") ? params["grp"] : "";
-            if (usr.empty() && grp.empty())
-                return "Error CHOWN: falta -usr o -grp\n";
-            return FileOperations::Chown(params["path"], usr, grp);
+
+            if (!params.count("path") || !params.count("usuario"))
+                return "Error CHOWN: faltan parámetros obligatorios (-path y/o -usuario)\n";
+
+            // Verificamos si vino el parámetro -r (recursivo)
+            bool isRecursive = params.count("r") > 0;
+
+            return FileOperations::Chown(params["path"], params["usuario"], isRecursive);
         }
         else if (command == "loss")
         {

@@ -258,24 +258,6 @@ namespace DiskManagement
             return out.str();
         }
 
-        //  Calcular byte de inicio
-        // La primera partición empieza justo después del MBR.
-        // Las siguientes empiezan donde termina la anterior.
-        //
-        int nextStart = sizeof(MBR); // punto de partida = fin del MBR
-
-        for (int i = 0; i < 4; i++)
-        {
-            if (mbr.Partitions[i].Start != -1)
-            {
-                int endOfThis = mbr.Partitions[i].Start + mbr.Partitions[i].Size;
-                if (endOfThis > nextStart)
-                {
-                    nextStart = endOfThis;
-                }
-            }
-        }
-
         // PARTICIÓN LÓGICA (type=L)
         // usando EBR (Extended Boot Record) en lista enlazada.
         if (t == "l")
@@ -381,15 +363,94 @@ namespace DiskManagement
             return out.str();
         }
 
-        //  Verificar espacio disponible (para primarias y extendidas)
-        if (nextStart + sizeBytes > mbr.MbrSize)
+        struct PartitionInfo
         {
-            out << "Error: No hay espacio suficiente en el disco\n";
-            out << "  Disponible: " << (mbr.MbrSize - nextStart) << " bytes\n";
+            int start;
+            int size;
+        };
+        std::vector<PartitionInfo> usedSpaces;
+
+        // 1. Recopilar particiones ya existentes
+        for (int i = 0; i < 4; i++)
+        {
+            if (mbr.Partitions[i].Start != -1)
+            {
+                usedSpaces.push_back({mbr.Partitions[i].Start, mbr.Partitions[i].Size});
+            }
+        }
+
+        // 2. Ordenarlas de izquierda a derecha en el disco
+        std::sort(usedSpaces.begin(), usedSpaces.end(), [](const PartitionInfo &a, const PartitionInfo &b)
+                  { return a.start < b.start; });
+
+        // 3. Buscar "huecos" libres (gaps)
+        struct FreeGap
+        {
+            int start;
+            int size;
+        };
+        std::vector<FreeGap> gaps;
+        int currentPos = sizeof(MBR);
+
+        for (const auto &p : usedSpaces)
+        {
+            if (p.start > currentPos)
+            {
+                gaps.push_back({currentPos, p.start - currentPos});
+            }
+            currentPos = p.start + p.size;
+        }
+
+        // Revisar el último gran hueco hasta el final del disco
+        if (mbr.MbrSize > currentPos)
+        {
+            gaps.push_back({currentPos, mbr.MbrSize - currentPos});
+        }
+
+        // 4. Filtrar solo los huecos donde sí cabe nuestra partición
+        std::vector<FreeGap> validGaps;
+        for (const auto &g : gaps)
+        {
+            if (g.size >= sizeBytes)
+            {
+                validGaps.push_back(g);
+            }
+        }
+
+        if (validGaps.empty())
+        {
+            out << "Error: No hay espacio suficiente o contiguo en el disco\n";
             out << "  Requerido:  " << sizeBytes << " bytes\n";
             file.close();
             return out.str();
         }
+
+        // 5. Aplicar el algoritmo seleccionado (fit)
+        FreeGap selectedGap = validGaps[0]; // First Fit (FF) por defecto
+
+        if (f == "b" || f == "bf")
+        { // Best Fit (BF)
+            for (const auto &g : validGaps)
+            {
+                if (g.size < selectedGap.size)
+                {
+                    selectedGap = g;
+                }
+            }
+        }
+        else if (f == "w" || f == "wf")
+        { // Worst Fit (WF)
+            for (const auto &g : validGaps)
+            {
+                if (g.size > selectedGap.size)
+                {
+                    selectedGap = g;
+                }
+            }
+        }
+
+        int nextStart = selectedGap.start;
+        // ----------------------------------------------------------------------------------
 
         //  Llenar la ranura libre
         Partition &p = mbr.Partitions[freeIndex];

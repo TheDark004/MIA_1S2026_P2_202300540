@@ -176,7 +176,49 @@ namespace FileOperations
         return out.str();
     }
 
-    std::string Chown(const std::string &path, const std::string &usr, const std::string &grp)
+    void ChangeOwnerRecursive(std::fstream &file, SuperBloque &sb, int inodeNum, int newUid)
+    {
+        Inode inodeData{};
+        FileSystem::ReadInode(file, sb, inodeNum, inodeData);
+
+        // Cambiar el dueño y la fecha de modificación
+        inodeData.i_uid = newUid;
+        std::string now = Utilities::GetCurrentDateTime();
+        memcpy(inodeData.i_mtime, now.c_str(), 19);
+        FileSystem::WriteInode(file, sb, inodeNum, inodeData);
+
+        // Si es archivo, terminamos la recursión de esta rama
+        if (inodeData.i_type[0] == '1')
+            return;
+
+        // Si es carpeta, recorremos sus apuntadores directos
+        for (int i = 0; i < 12; i++)
+        {
+            if (inodeData.i_block[i] != -1)
+            {
+                FolderBlock fb{};
+                int blockPos = sb.s_block_start + inodeData.i_block[i] * sizeof(FolderBlock);
+                Utilities::ReadObject(file, fb, blockPos);
+
+                for (int j = 0; j < 4; j++)
+                {
+                    if (fb.b_content[j].b_inodo != -1)
+                    {
+                        // Evitamos un bucle infinito ignorando "." y ".."
+                        size_t nameLen = strnlen(fb.b_content[j].b_name, 12);
+                        std::string entryName(fb.b_content[j].b_name, nameLen);
+
+                        if (entryName != "." && entryName != "..")
+                        {
+                            ChangeOwnerRecursive(file, sb, fb.b_content[j].b_inodo, newUid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    std::string Chown(const std::string &path, const std::string &usuario, bool isRecursive)
     {
         std::ostringstream out;
         out << "======= CHOWN =======\n";
@@ -216,55 +258,64 @@ namespace FileOperations
         Inode targetInodeData{};
         FileSystem::ReadInode(file, sb, targetInode, targetInodeData);
 
-        if (UserSession::currentSession.uid != 1)
+        if (UserSession::currentSession.uid != 1 && UserSession::currentSession.uid != targetInodeData.i_uid)
         {
-            out << "Error: Solo root puede cambiar el propietario\n";
+            out << "Error: Solo el usuario root o el propietario original pueden hacer chown\n";
             file.close();
             return out.str();
         }
 
         std::string usersContent = UserSession::ReadUsersFile(file, sb);
-        int newUid = -1;
-        int newGid = -1;
-
-        if (!usr.empty())
+        int newUid = UserSession::GetUid(usuario, usersContent);
+        if (newUid == -1)
         {
-            newUid = UserSession::GetUid(usr, usersContent);
-            if (newUid == -1)
-            {
-                out << "Error: Usuario '" << usr << "' no existe\n";
-                file.close();
-                return out.str();
-            }
+            out << "Error: El usuario '" << usuario << "' no existe\n";
+            file.close();
+            return out.str();
         }
 
-        if (!grp.empty())
+        // APLICAR LOS CAMBIOS
+        if (isRecursive)
         {
-            newGid = UserSession::GetGid(grp, usersContent);
-            if (newGid == -1)
-            {
-                out << "Error: Grupo '" << grp << "' no existe\n";
-                file.close();
-                return out.str();
-            }
+            ChangeOwnerRecursive(file, sb, targetInode, newUid);
+            out << "Propietario cambiado (RECURSIVO): " << path << " -> usuario=" << usuario << "\n";
         }
-
-        if (newUid != -1)
+        else
+        {
             targetInodeData.i_uid = newUid;
-        if (newGid != -1)
-            targetInodeData.i_gid = newGid;
+            std::string now = Utilities::GetCurrentDateTime();
+            memcpy(targetInodeData.i_mtime, now.c_str(), 19);
+            FileSystem::WriteInode(file, sb, targetInode, targetInodeData);
+            out << "Propietario cambiado: " << path << " -> usuario=" << usuario << "\n";
+        }
 
-        std::string now = Utilities::GetCurrentDateTime();
-        memcpy(targetInodeData.i_mtime, now.c_str(), 19);
-        FileSystem::WriteInode(file, sb, targetInode, targetInodeData);
+        if (sb.s_filesystem_type == 3)
+        {
+            Journal j_actual{};
+            memset(&j_actual, 0, sizeof(Journal));
+
+            strncpy(j_actual.j_content.i_operation, "chown", 9);
+            strncpy(j_actual.j_content.i_path, path.c_str(), 31);
+            j_actual.j_content.i_date = static_cast<float>(time(nullptr));
+
+            int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+
+            for (int i = 0; i < 50; i++)
+            {
+                Journal temp{};
+                file.seekg(journalStart + (i * sizeof(Journal)));
+                file.read(reinterpret_cast<char *>(&temp), sizeof(Journal));
+
+                if (temp.j_content.i_operation[0] == '\0')
+                {
+                    file.seekp(journalStart + (i * sizeof(Journal)));
+                    file.write(reinterpret_cast<const char *>(&j_actual), sizeof(Journal));
+                    break;
+                }
+            }
+        }
 
         file.close();
-        out << "Propietario cambiado: " << path;
-        if (newUid != -1)
-            out << " usuario=" << usr;
-        if (newGid != -1)
-            out << " grupo=" << grp;
-        out << "\n";
         out << "======================\n";
         return out.str();
     }

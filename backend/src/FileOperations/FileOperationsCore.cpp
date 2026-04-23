@@ -89,10 +89,14 @@ namespace FileOperations
     {
         Inode dirInode{};
         FileSystem::ReadInode(file, sb, dirInodeNum, dirInode);
+
+        std::string searchName = name.substr(0, 12); // Cortar a 12
+
         for (int i = 0; i < 12; i++)
         {
             if (dirInode.i_block[i] == -1)
-                break;
+                continue;
+
             FolderBlock fb{};
             int pos = sb.s_block_start + dirInode.i_block[i] * sizeof(FolderBlock);
             Utilities::ReadObject(file, fb, pos);
@@ -100,8 +104,11 @@ namespace FileOperations
             {
                 if (fb.b_content[j].b_inodo == -1)
                     continue;
-                std::string entryName(fb.b_content[j].b_name);
-                if (entryName == name)
+
+                size_t nameLen = strnlen(fb.b_content[j].b_name, 12);
+                std::string entryName(fb.b_content[j].b_name, nameLen);
+
+                if (entryName == searchName)
                 {
                     fb.b_content[j].b_inodo = -1;
                     std::memset(fb.b_content[j].b_name, 0, 12);
@@ -258,10 +265,14 @@ namespace FileOperations
     {
         Inode dirInode{};
         FileSystem::ReadInode(file, sb, dirInodeNum, dirInode);
+
+        // Cortamos la palabra que estamos buscando a 12 caracteres máximo
+        std::string searchName = name.substr(0, 12);
+
         for (int i = 0; i < 12; i++)
         {
             if (dirInode.i_block[i] == -1)
-                break; // Ojo: a veces los bloques no están en orden, podría ser mejor 'continue' si en el futuro borras bloques.
+                continue;
 
             FolderBlock fb{};
             int pos = sb.s_block_start + dirInode.i_block[i] * sizeof(FolderBlock);
@@ -272,12 +283,12 @@ namespace FileOperations
                 if (fb.b_content[j].b_inodo == -1)
                     continue;
 
-                // === LA SOLUCIÓN MÁGICA AQUÍ ===
-                // Calculamos el tamaño real (máximo 12) para evitar leer basura de memoria
+                // Leemos el nombre guardado en el disco (máximo 12)
                 size_t nameLen = strnlen(fb.b_content[j].b_name, 12);
                 std::string entryName(fb.b_content[j].b_name, nameLen);
 
-                if (entryName == name)
+                // Comparamos peras con peras (12 letras vs 12 letras)
+                if (entryName == searchName)
                 {
                     return fb.b_content[j].b_inodo;
                 }
