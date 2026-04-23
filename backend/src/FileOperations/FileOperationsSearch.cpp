@@ -171,6 +171,37 @@ namespace FileOperations
         memcpy(targetInodeData.i_mtime, now.c_str(), 19);
         FileSystem::WriteInode(file, sb, targetInode, targetInodeData);
 
+        if (sb.s_filesystem_type == 3)
+        {
+            Journal j_actual{};
+            memset(&j_actual, 0, sizeof(Journal));
+
+            strncpy(j_actual.j_content.i_operation, "chmod", 9);
+            strncpy(j_actual.j_content.i_path, path.c_str(), 31);
+
+            // Aprovechamos para guardar el permiso asignado en el contenido
+            strncpy(j_actual.j_content.i_content, ugo.c_str(), 63);
+
+            j_actual.j_content.i_date = static_cast<float>(time(nullptr));
+
+            int journalStart = UserSession::currentSession.partStart + sizeof(SuperBloque);
+
+            for (int i = 0; i < 50; i++)
+            {
+                Journal temp{};
+                file.seekg(journalStart + (i * sizeof(Journal)));
+                file.read(reinterpret_cast<char *>(&temp), sizeof(Journal));
+
+                // Si está vacío, escribimos aquí
+                if (temp.j_content.i_operation[0] == '\0')
+                {
+                    file.seekp(journalStart + (i * sizeof(Journal)));
+                    file.write(reinterpret_cast<const char *>(&j_actual), sizeof(Journal));
+                    break;
+                }
+            }
+        }
+
         file.close();
         out << "Permisos cambiados: " << path << " -> " << ugo << "\n";
         out << "======================\n";

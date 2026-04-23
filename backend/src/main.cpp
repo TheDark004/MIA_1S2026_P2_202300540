@@ -223,9 +223,9 @@ int main()
 
         int partStart = -1;
         for (int i = 0; i < 4; i++) {
-            // Usando Status[0] para evitar el error de char* vs char
+            
             if (mbr.Partitions[i].Status[0] == '1' && std::string(mbr.Partitions[i].Name) == partName) {
-                partStart = mbr.Partitions[i].Start; // Revisa si es .Start o .part_start
+                partStart = mbr.Partitions[i].Start; 
                 break;
             }
         }
@@ -247,7 +247,11 @@ int main()
                 json item;
                 item["operation"] = std::string(jEntry.j_content.i_operation);
                 item["path"] = std::string(jEntry.j_content.i_path);
-                item["content"] = "-"; // O el contenido si lo guardas
+                
+                // --- AQUI ESTA EL CAMBIO ---
+                std::string contenido = std::string(jEntry.j_content.i_content);
+                item["content"] = contenido.empty() ? "-" : contenido;
+                // ---------------------------
                 
                 // Formatear fecha
                 time_t rawtime = static_cast<time_t>(jEntry.j_content.i_date);
