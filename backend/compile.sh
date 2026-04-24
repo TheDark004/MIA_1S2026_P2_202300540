@@ -15,7 +15,6 @@ g++ -std=c++17 \
     src/FileOperations/FileOperationsFile.cpp \
     src/FileOperations/FileOperationsSearch.cpp \
     src/Utilities/Utilities.cpp \
-    src/Reports/Reports.h  \
     src/Reports/Reports.cpp  \
     src/Information/Information.cpp \
     -lpthread \
