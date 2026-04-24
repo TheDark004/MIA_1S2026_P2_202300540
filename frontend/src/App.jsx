@@ -6,7 +6,7 @@ import DiskSelector from "./components/DiskSelector";
 import LoginModal from "./components/LoginModal";
 import JournalViewer from "./components/JournalViewer";
 
-const BACKEND_URL = "";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 
 export default function App() {
   const [inputText, setInputText] = useState("");

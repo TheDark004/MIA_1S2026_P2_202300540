@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
+
 export default function JournalViewer({ onClose, partitionId }) {
   const [journal, setJournal] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,7 +19,7 @@ export default function JournalViewer({ onClose, partitionId }) {
     setIsLoading(true);
     setError("");
     try {
-      const res = await fetch(`/fs/journal?id=${partitionId}`);
+      const res = await fetch(`${BACKEND_URL}/fs/journal?id=${partitionId}`);
       if (!res.ok) throw new Error("Error al obtener Journaling");
       const data = await res.json();
       setJournal(data);

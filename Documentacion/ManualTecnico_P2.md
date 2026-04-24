@@ -619,7 +619,7 @@ Crea un archivo en el sistema de archivos virtual.
 
 ```bash
 mkfile -path=/home/user/Tarea.txt -size=75
-mkfile -path=/home/user/Tarea3.txt -cont=/home/thedark004/NAME.txt
+mkfile -path=/home/user/Tarea3.txt -cont=/home/ubuntu/NAME.txt
 mkfile -r -path=/home/user/docs/proyectos/fase1.txt
 ```
 
@@ -792,10 +792,10 @@ journaling -id=401A
 
 Campos mostrados en la tabla de la GUI:
 
-| Operación | Ruta             | Contenido    | Fecha              |
-| --------- | ---------------- | ------------ | ------------------ |
-| `mkdir`   | `/home`          | —            | `07/04/2026 19:07` |
-| `mkfile`  | `/home/user.txt` | `thedark004` | `07/04/2026 19:08` |
+| Operación | Ruta             | Contenido | Fecha              |
+| --------- | ---------------- | --------- | ------------------ |
+| `mkdir`   | `/home`          | —         | `07/04/2026 19:07` |
+| `mkfile`  | `/home/user.txt` | `ubuntu`  | `07/04/2026 19:08` |
 
 ---
 
@@ -861,7 +861,7 @@ sudo apt update
 sudo apt install -y g++ cmake graphviz nlohmann-json3-dev
 
 # 3. Clonar repositorio
-git clone https://github.com/thedark004/MIA_1S2026_P2_202300540.git
+git clone https://github.com/ubuntu/MIA_1S2026_P2_202300540.git
 cd MIA_1S2026_P2_202300540/backend
 
 # 4. Compilar

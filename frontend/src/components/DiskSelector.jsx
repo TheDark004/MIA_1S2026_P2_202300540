@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
+
 export default function DiskSelector({
   onClose,
   onPartitionSelect,
@@ -24,7 +26,7 @@ export default function DiskSelector({
     setLoadingDisks(true);
     setError("");
     try {
-      const res = await fetch("/get_disks");
+      const res = await fetch(`${BACKEND_URL}/get_disks`);
       if (!res.ok) throw new Error("Error " + res.status);
       const data = await res.json();
       setDisks(data);
@@ -42,7 +44,7 @@ export default function DiskSelector({
     setLoadingParts(true);
     setPartitions([]);
     try {
-      const res = await fetch("/get_partitions", {
+      const res = await fetch(`${BACKEND_URL}/get_partitions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: diskName }),

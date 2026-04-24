@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const BACKEND = "";
+const BACKEND = import.meta.env.VITE_BACKEND_URL ?? "";
 
 export default function FileExplorer({ onClose }) {
   const [entries, setEntries] = useState([]);
